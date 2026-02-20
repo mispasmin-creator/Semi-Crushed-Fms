@@ -1,0 +1,8 @@
+
+{
+  "name": "ProTrack - Semi-Finished Production Management",
+  "description": "A comprehensive production management system for tracking semi-finished goods from planning to crushing and finished goods generation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
