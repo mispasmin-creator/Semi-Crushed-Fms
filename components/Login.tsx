@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { LogIn, Lock, User } from 'lucide-react';
+import { loginWithSheet, UserRecord } from './src/loginApi';
+import PassaryLogo from './PassaryLogo';
 
 interface LoginProps {
-  onLogin: (username: string, password: string) => boolean;
+  onLogin: (user: UserRecord) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -11,37 +13,38 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
-    // Simulate API call delay
-    setTimeout(() => {
-      const success = onLogin(username, password);
-      if (!success) {
+    try {
+      const user = await loginWithSheet(username.trim(), password);
+      if (user) {
+        onLogin(user);
+      } else {
         setError('Invalid username or password');
       }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Unable to connect. Please check your internet connection and try again.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-slate-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="bg-[#84a93c] p-8 text-center">
-          <div className="w-20 h-16 mx-auto text-white mb-4">
-            <svg viewBox="0 0 100 80" className="w-full h-full fill-current">
-              <path d="M50 0 L90 25 L90 55 L50 80 L10 55 L10 25 Z M50 15 L75 30 L50 45 L25 30 Z M25 40 L50 55 L75 40 L75 60 L50 75 L25 60 Z" />
-            </svg>
+          <div className="flex justify-center mb-2">
+            <PassaryLogo variant="light" />
           </div>
-          <h1 className="text-3xl font-black text-white tracking-widest uppercase">PASMIN</h1>
-          <p className="text-emerald-100 text-sm font-medium mt-2">Production Management System</p>
+          <p className="text-emerald-100 text-sm font-medium mt-3">Production Management System</p>
         </div>
 
         <div className="p-8">
-          <h2 className="text-xl font-bold text-slate-800 mb-6">Welcome Back</h2>
-          
+
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl">
               <p className="text-red-600 text-sm font-medium">{error}</p>
@@ -60,6 +63,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-medium"
                   placeholder="Enter username"
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -75,6 +79,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-medium"
                   placeholder="Enter password"
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -94,11 +99,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               )}
             </button>
           </form>
-
-          <p className="text-center text-xs text-slate-400 font-medium mt-6">
-            Demo credentials: any username and password
-          </p>
         </div>
+        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed text-center w-full pb-4">
+          Powered by <span className="text-[#84a93c]"><a href="https://botivate.in">Botivate</a></span>
+        </p>
       </div>
     </div>
   );

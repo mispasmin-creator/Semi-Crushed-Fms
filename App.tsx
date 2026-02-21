@@ -31,6 +31,7 @@ import {
   Step3SFEntry,
   Step5Crushing
 } from './types';
+import { UserRecord, hasPageAccess } from './components/src/loginApi';
 
 // Components
 import Dashboard from './components/Dashboard';
@@ -40,6 +41,7 @@ import Step3List from './components/Step3List';
 import Step4List from './components/Step4List';
 import Step5List from './components/Step5List';
 import Login from './components/Login';
+import PassaryLogo from './components/PassaryLogo';
 
 // Initial Dummy Data for demonstration
 const initialDummyData: AppState = {
@@ -84,15 +86,15 @@ const initialDummyData: AppState = {
 };
 
 // Storage keys
-const AUTH_STORAGE_KEY = 'protrack_auth';
+const AUTH_STORAGE_KEY = 'protrack_user';
 const STATE_STORAGE_KEY = 'protrack_state_v4';
 const ACTIVE_TAB_KEY = 'protrack_active_tab';
 
 const App: React.FC = () => {
-  // Initialize auth state from localStorage
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const savedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
-    return savedAuth ? JSON.parse(savedAuth) : false;
+  // Initialize user from localStorage (persisted login)
+  const [currentUser, setCurrentUser] = useState<UserRecord | null>(() => {
+    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
   });
 
   // Initialize active tab from localStorage
@@ -107,10 +109,14 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : initialDummyData;
   });
 
-  // Persist auth state
+  // Persist user session
   useEffect(() => {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(isLoggedIn));
-  }, [isLoggedIn]);
+    if (currentUser) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  }, [currentUser]);
 
   // Persist active tab
   useEffect(() => {
@@ -164,26 +170,17 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleLogin = (username: string, password: string) => {
-    // Add your authentication logic here
-    // For demo purposes, accept any non-empty credentials
-    if (username && password) {
-      setIsLoggedIn(true);
-      return true;
-    }
-    return false;
+  const handleLogin = (user: UserRecord) => {
+    setCurrentUser(user);
+    setActiveTab('dashboard');
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
+    setCurrentUser(null);
     setActiveTab('dashboard');
-    // Clear auth only, keep state if you want to persist data
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    // Optionally clear everything:
-    // localStorage.clear();
   };
 
-  if (!isLoggedIn) {
+  if (!currentUser) {
     return <Login onLogin={handleLogin} />;
   }
 
@@ -199,7 +196,7 @@ const App: React.FC = () => {
     }
   };
 
-  const navItems = [
+  const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'step1', label: 'SF Production', icon: PackagePlus },
     { id: 'step2', label: 'Job Card Planning', icon: ClipboardList },
@@ -207,6 +204,11 @@ const App: React.FC = () => {
     { id: 'step4', label: 'Mark Done', icon: CircleCheckBig },
     { id: 'step5', label: 'Crushing', icon: Hammer },
   ];
+
+  // Filter nav items based on the user's page access
+  const navItems = allNavItems.filter((item) =>
+    hasPageAccess(currentUser?.pageAccess ?? [], item.label)
+  );
 
   return (
     <div className="flex h-screen bg-[#F4F7FE] overflow-hidden">
@@ -223,15 +225,8 @@ const App: React.FC = () => {
         fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transition-transform duration-300 transform lg:static lg:translate-x-0 h-full flex flex-col
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="flex flex-col items-center justify-center px-6 py-6 border-b border-slate-100 bg-white">
-          <div className="flex flex-col items-center space-y-2">
-            <div className="w-16 h-12 flex items-center justify-center text-[#84a93c]">
-              <svg viewBox="0 0 100 80" className="w-full h-full fill-current">
-                <path d="M50 0 L90 25 L90 55 L50 80 L10 55 L10 25 Z M50 15 L75 30 L50 45 L25 30 Z M25 40 L50 55 L75 40 L75 60 L50 75 L25 60 Z" />
-              </svg>
-            </div>
-            <span className="text-xl font-black text-[#84a93c] tracking-widest uppercase">PASMIN</span>
-          </div>
+        <div className="flex flex-col items-center justify-center px-6 py-5 border-b border-slate-100 bg-white">
+          <PassaryLogo variant="dark" />
           <button onClick={() => setIsSidebarOpen(false)} className="absolute top-4 right-4 lg:hidden text-slate-400">
             <X size={20} />
           </button>
@@ -297,7 +292,7 @@ const App: React.FC = () => {
             </button>
             <div className="flex items-center space-x-2 pl-2 border-l border-slate-100">
               <div className="text-right hidden sm:block">
-                <p className="text-xs font-bold text-slate-800">PASMIN Admin</p>
+                <p className="text-xs font-bold text-slate-800">{currentUser?.name || currentUser?.username}</p>
                 <p className="text-[10px] text-emerald-500 font-bold uppercase">Online</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-[#84a93c] shadow-sm border border-emerald-100">
@@ -315,7 +310,7 @@ const App: React.FC = () => {
         {/* Fixed Footer */}
         <footer className="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-slate-100 px-6 py-3 flex justify-center items-center z-30">
           <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
-            Powered by <span className="text-[#84a93c]">Botivate Production Engine</span>
+            Powered by <span className="text-[#84a93c]"><a href="https://botivate.in">Botivate</a></span>
           </p>
         </footer>
       </div>

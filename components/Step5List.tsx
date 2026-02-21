@@ -111,27 +111,30 @@ const Step5List: React.FC<Props> = ({ state, onUpdate }) => {
 
       const timestamp = formatDate(new Date());
 
-      // Prepare data for 'Crushing Actual' sheet
-      // Headers: Timestamp, #REF!(Date), Date Of Production, Crushing Product Name, Qty Of Crushing Product, FG1 Name, Qty1, FG2 Name, Qty2, FG3 Name, Qty3, FG4 Name, Qty4, Start Photo, End Photo, Remarks, Machine Hour
+      // CORRECTED COLUMN MAPPING for "Crushing Actual" sheet
+      // Headers: Timestamp, Date Of Production, Crushing Product Name, Qty Of Crushing Product, 
+      // Finished Goods Name 1, Qty 1, Finished Goods Name 2, Qty 2, Finished Goods Name 3, Qty 3, 
+      // Finished Goods Name 4, Qty 4, Starting Reading Photo, Ending Reading Photo, Remarks, Machine Running Hour
       const rowData = [
         timestamp,                          // Col A: Timestamp
-        formData.date || "",                // Col B: Date (User input)
-        formData.dateOfProduction,          // Col C: Date Of Production
-        formData.crushingProductName,       // Col D: Crushing Product Name
-        selectedJob.qtyOfSemiFinishedGood,  // Col E: Qty Of Crushing Product (Input Qty)
-        formData.fg1Name,                   // Col F: FG1
-        Number(formData.fg1Qty) || 0,        // Col G: Qty1
-        formData.fg2Name,                   // Col H: FG2
-        Number(formData.fg2Qty) || 0,        // Col I: Qty2
-        formData.fg3Name,                   // Col J: FG3
-        Number(formData.fg3Qty) || 0,        // Col K: Qty3
-        formData.fg4Name,                   // Col L: FG4
-        Number(formData.fg4Qty) || 0,        // Col M: Qty4
-        startPhotoUrl,                      // Col N: Starting Reading Photo
-        endPhotoUrl,                        // Col O: Ending Reading Photo
-        formData.remarks,                   // Col P: Remarks
-        Number(formData.machineRunningHour) || 0, // Col Q: Machine Running Hour
+        formData.dateOfProduction,          // Col B: Date Of Production
+        formData.crushingProductName,       // Col C: Crushing Product Name
+        selectedJob.qtyOfSemiFinishedGood,  // Col D: Qty Of Crushing Product (Input Qty)
+        formData.fg1Name,                   // Col E: Finished Goods Name 1
+        Number(formData.fg1Qty) || 0,       // Col F: Qty 1
+        formData.fg2Name,                   // Col G: Finished Goods Name 2
+        Number(formData.fg2Qty) || 0,       // Col H: Qty 2
+        formData.fg3Name,                   // Col I: Finished Goods Name 3
+        Number(formData.fg3Qty) || 0,       // Col J: Qty 3
+        formData.fg4Name,                   // Col K: Finished Goods Name 4
+        Number(formData.fg4Qty) || 0,       // Col L: Qty 4
+        startPhotoUrl,                      // Col M: Starting Reading Photo
+        endPhotoUrl,                        // Col N: Ending Reading Photo
+        formData.remarks,                   // Col O: Remarks
+        Number(formData.machineRunningHour) || 0, // Col P: Machine Running Hour
       ];
+
+      console.log('Submitting row data:', rowData); // For debugging
 
       const success = await submitCrushingActual(rowData);
       if (success) {
@@ -140,6 +143,22 @@ const Step5List: React.FC<Props> = ({ state, onUpdate }) => {
         setIsModalOpen(false);
         setStartingPhoto(null);
         setEndingPhoto(null);
+        // Reset form
+        setFormData({
+          dateOfProduction: '',
+          date: new Date().toISOString().split('T')[0],
+          crushingProductName: '',
+          fg1Name: '',
+          fg1Qty: '',
+          fg2Name: '',
+          fg2Qty: '',
+          fg3Name: '',
+          fg3Qty: '',
+          fg4Name: '',
+          fg4Qty: '',
+          remarks: '',
+          machineRunningHour: ''
+        });
         await loadData(); // Refresh list - this will remove the completed job from pending
       } else {
         alert('Failed to submit crushing data.');

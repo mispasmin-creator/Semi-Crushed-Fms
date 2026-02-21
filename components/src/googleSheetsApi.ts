@@ -143,16 +143,18 @@ export const fetchSemiProductionData = async (): Promise<SemiProductionRecord[]>
 };
 
 // Extract dropdown options from "Crushing Items Name" sheet - PURE DYNAMIC VERSION
+// Extract dropdown options from "Crushing Items Name" sheet
+// Extract dropdown options from "Crusing Items Name" sheet
 export const fetchSemiFinishedOptions = async (): Promise<DropdownOption[]> => {
   try {
-    console.log('Fetching options from Crushing Items Name sheet...');
-    const data = await fetchSheetData('Crushing Items Name');
+    console.log('Fetching options from Crusing Items Name sheet...');
+    const data = await fetchSheetData('Crusing Items Name');  // Changed from 'Crushing Items Name'
 
-    console.log('Raw data from Crushing Items Name:', data);
+    console.log('Raw data from Crusing Items Name:', data);
 
     if (data.length === 0) {
       console.log('No data returned from sheet');
-      return []; // Return empty array, no hardcoded data
+      return [];
     }
 
     // Log all rows to see structure
@@ -160,16 +162,18 @@ export const fetchSemiFinishedOptions = async (): Promise<DropdownOption[]> => {
       console.log(`Row ${index}:`, row);
     });
 
-    // Find the header row (usually first row with content)
+    // Find the header row that contains "Crushing Product Name"
     let headerRowIndex = -1;
     let nameColumnIndex = -1;
 
-    // Search for the header row that contains "Name Of Semi Finished Good"
-    for (let i = 0; i < Math.min(10, data.length); i++) {
+    // Search through first 20 rows to find the header
+    for (let i = 0; i < Math.min(20, data.length); i++) {
       const row = data[i];
       for (let j = 0; j < row.length; j++) {
         const cellValue = (row[j] || '').toString().trim();
-        if (cellValue.toLowerCase().includes('name of semi finished good')) {
+        // Check for exact match or includes (case insensitive)
+        if (cellValue.toLowerCase() === 'crushing product name' || 
+            cellValue.toLowerCase().includes('crushing product name')) {
           headerRowIndex = i;
           nameColumnIndex = j;
           console.log(`Found header at row ${i}, column ${j}:`, cellValue);
@@ -180,8 +184,27 @@ export const fetchSemiFinishedOptions = async (): Promise<DropdownOption[]> => {
     }
 
     if (nameColumnIndex === -1) {
-      console.log('Name Of Semi Finished Good column not found in any header row');
-      return []; // Return empty array if column not found
+      console.log('Crushing Product Name column not found in any header row');
+      // Try to find any column that might contain product names as fallback
+      // Look at first data row after headers to identify potential product column
+      for (let i = 1; i < Math.min(5, data.length); i++) {
+        const row = data[i];
+        for (let j = 0; j < row.length; j++) {
+          const cellValue = (row[j] || '').toString().trim();
+          // If it looks like a product name (contains letters and maybe numbers)
+          if (cellValue && cellValue.length > 2 && /[a-zA-Z]/.test(cellValue)) {
+            nameColumnIndex = j;
+            headerRowIndex = 0; // Assume first row is header
+            console.log(`Using fallback - found potential product data at column ${j}`);
+            break;
+          }
+        }
+        if (nameColumnIndex !== -1) break;
+      }
+      
+      if (nameColumnIndex === -1) {
+        return []; // Return empty array if still not found
+      }
     }
 
     console.log(`Using header row ${headerRowIndex}, column ${nameColumnIndex} for product names`);
@@ -203,21 +226,22 @@ export const fetchSemiFinishedOptions = async (): Promise<DropdownOption[]> => {
 
     console.log('Collected unique products:', Array.from(options));
 
-    // Convert to array of options
-    const result = Array.from(options).map(value => ({
-      value,
-      label: value
-    }));
+    // Convert to array of options and sort alphabetically
+    const result = Array.from(options)
+      .map(value => ({
+        value,
+        label: value
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     console.log('Final dropdown options:', result);
     return result;
 
   } catch (error) {
     console.error('Error fetching semi-finished options:', error);
-    return []; // Return empty array on error - NO HARDCODED DATA
+    return [];
   }
 };
-
 // Submit data to "Semi Production" sheet using doPost
 export const submitToSemiProduction = async (rowData: any[]): Promise<boolean> => {
   try {

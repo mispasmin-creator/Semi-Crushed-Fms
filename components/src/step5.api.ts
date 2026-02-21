@@ -29,6 +29,7 @@ export interface CrushingSubmissionData {
 // Fetch crushing items for dropdowns (4 separate columns for FG1-4)
 export const fetchCrushingItems = async (): Promise<{ headers: string[], options: string[][] }> => {
     try {
+        // Fix: Use correct sheet name "Crusing Items Name" (note: it's misspelled as "Crusing" not "Crushing")
         const data = await fetchSheetData('Crusing Items Name');
 
         if (!data || data.length === 0) {
@@ -124,12 +125,16 @@ export const fetchCrushingJobs = async (): Promise<SemiActualRecord[]> => {
     }
 };
 
-// Submit to crushing actual
+// Submit to crushing actual - FIXED sheet name to match exactly what's in your Google Sheets
 export const submitCrushingActual = async (rowData: any[]): Promise<boolean> => {
     try {
+        // Log the data being sent for debugging
+        console.log('Submitting to Crushing Actual:', rowData);
+        
         const formData = new FormData();
         formData.append('action', 'insert');
-        formData.append('sheetName', 'Crushing_actual');
+        // FIXED: Use "Crushing Actual" (with space) instead of "Crushing_actual" (with underscore)
+        formData.append('sheetName', 'Crushing Actual');
         formData.append('rowData', JSON.stringify(rowData));
 
         const response = await fetch(APPS_SCRIPT_URL, {
@@ -138,13 +143,16 @@ export const submitCrushingActual = async (rowData: any[]): Promise<boolean> => 
             body: formData
         });
 
-        if (!response.ok) throw new Error('Network response was not ok');
+        if (!response.ok) {
+            console.error('Network response was not ok:', response.status, response.statusText);
+            return false;
+        }
+        
         const result = await response.json();
+        console.log('Submit response:', result);
 
         if (!result.success) {
             console.error('Apps Script Error in submitCrushingActual:', result.error);
-            // Optionally throw to let the caller handle the specific message
-            // throw new Error(result.error); 
             return false;
         }
 
@@ -158,6 +166,8 @@ export const submitCrushingActual = async (rowData: any[]): Promise<boolean> => 
 // Update actual2 in Semi Actual sheet
 export const updateCrushingActualDate = async (rowIndex: number, columnIndex: number, date: string): Promise<boolean> => {
     try {
+        console.log(`Updating Semi Actual: row ${rowIndex}, col ${columnIndex}, value ${date}`);
+        
         const formData = new FormData();
         formData.append('action', 'updateCell');
         formData.append('sheetName', 'Semi Actual');
@@ -171,8 +181,14 @@ export const updateCrushingActualDate = async (rowIndex: number, columnIndex: nu
             body: formData
         });
 
-        if (!response.ok) throw new Error('Network response was not ok');
+        if (!response.ok) {
+            console.error('Network response was not ok:', response.status, response.statusText);
+            return false;
+        }
+        
         const result = await response.json();
+        console.log('Update response:', result);
+        
         return result.success === true;
     } catch (error) {
         console.error('Error updating crushing actual date:', error);
