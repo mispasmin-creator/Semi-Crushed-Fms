@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  AppState, 
-  ProductionStatus, 
-  Step1SFProduction 
+import {
+  AppState,
+  ProductionStatus,
+  Step1SFProduction
 } from '../types';
-import { Plus, X, Edit3, Trash2, Loader, RefreshCw } from 'lucide-react';
-import { 
-  fetchSemiFinishedOptions, 
-  submitToSemiProduction, 
-  fetchLatestSFSrNo, 
+import { Plus, X, Loader, RefreshCw, Ban } from 'lucide-react';
+import {
+  fetchSemiFinishedOptions,
+  submitToSemiProduction,
+  fetchLatestSFSrNo,
   fetchSemiProductionData,
+  submitCancelOrder,
   SemiProductionRecord,
-  DropdownOption 
+  DropdownOption
 } from './src/googleSheetsApi';
 
 interface Props {
@@ -33,6 +34,14 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
     qty: 0,
     notes: '',
   });
+
+  // Cancel Order modal state
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelRecord, setCancelRecord] = useState<SemiProductionRecord | null>(null);
+  const [cancelQty, setCancelQty] = useState<number | ''>('');
+  const [isCancelSubmitting, setIsCancelSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
 
   // Fetch data from Google Sheet on component mount
   useEffect(() => {
@@ -59,9 +68,15 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
 
   const loadOptions = async () => {
     setIsLoadingOptions(true);
-    const fetchedOptions = await fetchSemiFinishedOptions();
-    setOptions(fetchedOptions);
-    setIsLoadingOptions(false);
+    try {
+      const fetchedOptions = await fetchSemiFinishedOptions();
+      setOptions(fetchedOptions);
+    } catch (error) {
+      console.error('Error loading options:', error);
+      setOptions([]);
+    } finally {
+      setIsLoadingOptions(false);
+    }
   };
 
   // Generate SF number when modal opens
@@ -117,14 +132,14 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
       if (submitted) {
         // Refresh data from sheet
         await loadSheetData();
-        
+
         // Close modal and reset form
         setIsModalOpen(false);
-        setFormData({ 
-          sfSrNo: '', 
-          name: '', 
-          qty: 0, 
-          notes: '' 
+        setFormData({
+          sfSrNo: '',
+          name: '',
+          qty: 0,
+          notes: ''
         });
 
         alert('Order created successfully!');
@@ -139,13 +154,64 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
     }
   };
 
+  // Handle Order Cancel button click
+  const openCancelModal = (record: SemiProductionRecord) => {
+    setCancelRecord(record);
+    setCancelQty('');
+    setIsCancelModalOpen(true);
+  };
+
+  // Auto-dismiss success toast after 3s
+  useEffect(() => {
+    if (!successMessage) return;
+    const t = setTimeout(() => setSuccessMessage(''), 3000);
+    return () => clearTimeout(t);
+  }, [successMessage]);
+
+  const handleCancelSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelRecord || cancelQty === '' || Number(cancelQty) <= 0) return;
+
+    // Snapshot what we need before closing modal
+    const sfSrNo = cancelRecord.sfSrNo;
+    const qty = Number(cancelQty);
+
+    setIsCancelSubmitting(true);
+    try {
+      const success = await submitCancelOrder(sfSrNo, qty);
+
+      if (success) {
+        // ✅ Close modal & reset state FIRST — before any async reload
+        setIsCancelModalOpen(false);
+        setCancelRecord(null);
+        setCancelQty('');
+        setIsCancelSubmitting(false);
+
+        // Show in-page success toast (no blocking alert)
+        setSuccessMessage(`Cancel order for ${sfSrNo} submitted successfully!`);
+
+        // Reload table data in background after modal is gone
+        loadSheetData();
+      } else {
+        setIsCancelSubmitting(false);
+        setSuccessMessage('');
+        alert('Failed to submit cancel order. Please check the console and try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting cancel order:', error);
+      setIsCancelSubmitting(false);
+      alert('An error occurred. Please try again.');
+    }
+  };
+
+
   const calculateProgress = (qty: number, made: number = 0) => {
     if (!qty || qty === 0) return 0;
     return Math.min(100, Math.round((made / qty) * 100));
   };
 
-  const getStatusColor = (status: string) => {
-    switch(status?.toUpperCase()) {
+  const getStatusColor = (status: string | number) => {
+    switch (String(status || '').toUpperCase()) {
       case 'COMPLETED':
         return 'bg-emerald-50 text-emerald-500';
       case 'IN PROGRESS':
@@ -158,6 +224,15 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+
+      {/* Success Toast */}
+      {successMessage && (
+        <div className="fixed top-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-200 text-sm font-bold animate-in slide-in-from-top-2 duration-300">
+          <span className="text-lg">✓</span>
+          {successMessage}
+        </div>
+      )}
+
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-black text-slate-800">Production Demand</h2>
@@ -166,7 +241,7 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <button 
+          <button
             onClick={loadSheetData}
             className="flex items-center px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all font-bold"
             title="Refresh data"
@@ -174,7 +249,7 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
             <RefreshCw size={16} className="mr-2" />
             Refresh
           </button>
-          <button 
+          <button
             onClick={() => {
               setIsModalOpen(true);
             }}
@@ -221,7 +296,7 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
               ) : (
                 sheetData.map((record, index) => {
                   const progress = calculateProgress(record.qty, record.totalMade);
-                  
+
                   return (
                     <tr key={index} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4">
@@ -237,8 +312,8 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-2">
                           <div className="w-12 h-1.5 bg-slate-100 rounded-full">
-                            <div 
-                              className="bg-[#84a93c] h-full rounded-full transition-all duration-500" 
+                            <div
+                              className="bg-[#84a93c] h-full rounded-full transition-all duration-500"
                               style={{ width: `${progress}%` }}
                             />
                           </div>
@@ -256,21 +331,13 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end space-x-1">
-                          <button className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all">
-                            <Edit3 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this order?')) {
-                                alert('Delete functionality to be implemented');
-                              }
-                            }}
-                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => openCancelModal(record)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-lg transition-all text-[11px] font-black uppercase tracking-tight border border-red-100"
+                        >
+                          <Ban size={13} />
+                          Order Cancel
+                        </button>
                       </td>
                     </tr>
                   );
@@ -280,6 +347,74 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
           </table>
         </div>
       </div>
+
+      {/* Cancel Order Modal */}
+      {isCancelModalOpen && cancelRecord && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in zoom-in duration-300">
+          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-50">
+              <div>
+                <h3 className="text-lg font-black text-slate-800">Order Cancel</h3>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  SF: <span className="text-red-400 font-black">{cancelRecord.sfSrNo}</span> &mdash; {cancelRecord.nameOfSemiFinished}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsCancelModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCancelSubmit} className="p-6 space-y-4">
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Total Qty</span>
+                  <span className="font-black text-slate-700">{cancelRecord.qty}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Pending</span>
+                  <span className="font-black text-amber-500">{cancelRecord.pending}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
+                  Cancel Qty
+                </label>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={cancelRecord.qty}
+                  value={cancelQty}
+                  onChange={e => setCancelQty(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Enter cancel quantity"
+                  className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-red-400 outline-none font-bold text-xs"
+                />
+              </div>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isCancelSubmitting || cancelQty === '' || Number(cancelQty) <= 0}
+                  className="w-full py-3.5 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition-all shadow-lg flex items-center justify-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCancelSubmitting ? (
+                    <>
+                      <Loader size={16} className="animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Ban size={16} />
+                      <span>Submit Cancel Order</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {isModalOpen && (
@@ -297,28 +432,28 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
                     SF Sr. No. {isLoadingSfNo && <Loader size={12} className="inline animate-spin ml-1" />}
                   </label>
-                  <input 
+                  <input
                     readOnly
-                    type="text" 
+                    type="text"
                     value={formData.sfSrNo}
                     placeholder="Auto-generated"
-                    className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed" 
+                    className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
                   />
                 </div>
                 <div className="col-span-1">
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Target Qty</label>
-                  <input 
+                  <input
                     required
-                    type="text" 
+                    type="text"
                     value={formData.qty === 0 ? '' : formData.qty}
                     onChange={e => {
                       const value = e.target.value;
                       if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                        setFormData({...formData, qty: value === '' ? 0 : Number(value)});
+                        setFormData({ ...formData, qty: value === '' ? 0 : Number(value) });
                       }
                     }}
                     placeholder="Enter quantity"
-                    className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-bold text-xs" 
+                    className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-bold text-xs"
                   />
                 </div>
               </div>
@@ -329,7 +464,7 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
                 <select
                   required
                   value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-bold text-xs appearance-none"
                   disabled={isLoadingOptions}
                 >
@@ -343,16 +478,16 @@ const Step1List: React.FC<Props> = ({ state, onUpdate }) => {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Production Notes</label>
-                <textarea 
+                <textarea
                   rows={2}
                   value={formData.notes}
-                  onChange={e => setFormData({...formData, notes: e.target.value})}
+                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Instructions..."
-                  className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-bold text-xs resize-none" 
+                  className="w-full px-4 py-2.5 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-bold text-xs resize-none"
                 />
               </div>
               <div className="pt-2">
-                <button 
+                <button
                   type="submit"
                   disabled={isSubmitting || isLoadingOptions || isLoadingSfNo}
                   className="w-full py-3.5 bg-[#84a93c] text-white font-black rounded-xl hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center space-x-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"

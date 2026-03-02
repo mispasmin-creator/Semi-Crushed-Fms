@@ -40,7 +40,7 @@ export const fetchSheetData = async (sheetName: string): Promise<string[][]> => 
     return result.data || [];
   } catch (error) {
     console.error(`Error fetching sheet ${sheetName}:`, error);
-    throw error; // Throw error instead of returning empty array
+    throw error;
   }
 };
 
@@ -49,16 +49,14 @@ export const fetchLatestSFSrNo = async (): Promise<string> => {
   try {
     const data = await fetchSheetData('Semi Production');
 
-    // Skip header rows (first 4 rows as shown in your screenshot)
     const actualDataRows = data.slice(6);
 
     if (actualDataRows.length === 0) {
       return 'SF-100';
     }
 
-    const SF_SR_NO_COLUMN_INDEX = 1; // Column B (0-based index)
+    const SF_SR_NO_COLUMN_INDEX = 1;
     const sfPrefix = 'SF-';
-
     let maxNumber = 0;
 
     actualDataRows.forEach(row => {
@@ -74,16 +72,12 @@ export const fetchLatestSFSrNo = async (): Promise<string> => {
       }
     });
 
-    if (maxNumber === 0) {
-      return 'SF-100';
-    }
+    if (maxNumber === 0) return 'SF-100';
 
-    const nextNumber = maxNumber + 1;
-    return `SF-${nextNumber}`;
-
+    return `SF-${maxNumber + 1}`;
   } catch (error) {
     console.error('Error fetching latest SF number:', error);
-    throw error; // Throw error instead of returning fallback
+    throw error;
   }
 };
 
@@ -94,11 +88,9 @@ export const fetchSemiProductionData = async (): Promise<SemiProductionRecord[]>
 
     if (data.length <= 6) return [];
 
-    // Skip the first 4 header rows
     const dataRows = data.slice(6);
 
     return dataRows.map((row) => {
-      // Make sure row has enough columns
       if (row.length < 5) return null;
 
       const timestamp = row[0] || '';
@@ -109,16 +101,15 @@ export const fetchSemiProductionData = async (): Promise<SemiProductionRecord[]>
       const totalPlanned = parseFloat(row[5]) || 0;
       const totalMade = parseFloat(row[6]) || 0;
       const pending = parseFloat(row[7]) !== undefined ? parseFloat(row[7]) : qty;
-      const status = row[8] || (pending > 0 ? 'PENDING' : 'COMPLETED');
+      const cancelOrder = row[8] || ''; // row[8] is Cancel Order (Column I)
+      const status = row[9] || (pending > 0 ? 'PENDING' : 'COMPLETED'); // row[9] is Status (Column J)
 
-      // Format timestamp properly
       let formattedTimestamp = timestamp;
       if (timestamp && timestamp.includes('T')) {
         try {
-          const date = new Date(timestamp);
-          formattedTimestamp = date.toLocaleString();
+          formattedTimestamp = new Date(timestamp).toLocaleString();
         } catch (e) {
-          // Keep original if parsing fails
+          // keep original
         }
       }
 
@@ -133,50 +124,32 @@ export const fetchSemiProductionData = async (): Promise<SemiProductionRecord[]>
         pending,
         status,
         planned: row[9] || '',
-        actual: row[10] || ''
+        actual: row[10] || '',
       };
     }).filter(record => record !== null) as SemiProductionRecord[];
   } catch (error) {
     console.error('Error fetching semi production data:', error);
-    throw error; // Throw error instead of returning empty array
+    throw error;
   }
 };
 
-// Extract dropdown options from "Crushing Items Name" sheet - PURE DYNAMIC VERSION
-// Extract dropdown options from "Crushing Items Name" sheet
 // Extract dropdown options from "Crusing Items Name" sheet
 export const fetchSemiFinishedOptions = async (): Promise<DropdownOption[]> => {
   try {
-    console.log('Fetching options from Crusing Items Name sheet...');
-    const data = await fetchSheetData('Crusing Items Name');  // Changed from 'Crushing Items Name'
+    const data = await fetchSheetData('Crusing Items Name');
 
-    console.log('Raw data from Crusing Items Name:', data);
+    if (data.length === 0) return [];
 
-    if (data.length === 0) {
-      console.log('No data returned from sheet');
-      return [];
-    }
-
-    // Log all rows to see structure
-    data.forEach((row, index) => {
-      console.log(`Row ${index}:`, row);
-    });
-
-    // Find the header row that contains "Crushing Product Name"
     let headerRowIndex = -1;
     let nameColumnIndex = -1;
 
-    // Search through first 20 rows to find the header
     for (let i = 0; i < Math.min(20, data.length); i++) {
       const row = data[i];
       for (let j = 0; j < row.length; j++) {
-        const cellValue = (row[j] || '').toString().trim();
-        // Check for exact match or includes (case insensitive)
-        if (cellValue.toLowerCase() === 'crushing product name' || 
-            cellValue.toLowerCase().includes('crushing product name')) {
+        const cellValue = (row[j] || '').toString().trim().toLowerCase();
+        if (cellValue === 'crushing product name' || cellValue.includes('crushing product name')) {
           headerRowIndex = i;
           nameColumnIndex = j;
-          console.log(`Found header at row ${i}, column ${j}:`, cellValue);
           break;
         }
       }
@@ -184,64 +157,99 @@ export const fetchSemiFinishedOptions = async (): Promise<DropdownOption[]> => {
     }
 
     if (nameColumnIndex === -1) {
-      console.log('Crushing Product Name column not found in any header row');
-      // Try to find any column that might contain product names as fallback
-      // Look at first data row after headers to identify potential product column
       for (let i = 1; i < Math.min(5, data.length); i++) {
         const row = data[i];
         for (let j = 0; j < row.length; j++) {
           const cellValue = (row[j] || '').toString().trim();
-          // If it looks like a product name (contains letters and maybe numbers)
           if (cellValue && cellValue.length > 2 && /[a-zA-Z]/.test(cellValue)) {
             nameColumnIndex = j;
-            headerRowIndex = 0; // Assume first row is header
-            console.log(`Using fallback - found potential product data at column ${j}`);
+            headerRowIndex = 0;
             break;
           }
         }
         if (nameColumnIndex !== -1) break;
       }
-      
-      if (nameColumnIndex === -1) {
-        return []; // Return empty array if still not found
-      }
+      if (nameColumnIndex === -1) return [];
     }
 
-    console.log(`Using header row ${headerRowIndex}, column ${nameColumnIndex} for product names`);
-
-    // Collect all values from the identified column (starting after header row)
     const options = new Set<string>();
 
     for (let i = headerRowIndex + 1; i < data.length; i++) {
       const row = data[i];
       if (row && row.length > nameColumnIndex) {
         const value = row[nameColumnIndex]?.toString().trim();
-        // Only add non-empty, non-null values
         if (value && value !== '' && value !== 'undefined' && value !== 'null') {
           options.add(value);
-          console.log(`Found product at row ${i}:`, value);
         }
       }
     }
 
-    console.log('Collected unique products:', Array.from(options));
-
-    // Convert to array of options and sort alphabetically
-    const result = Array.from(options)
-      .map(value => ({
-        value,
-        label: value
-      }))
+    return Array.from(options)
+      .map(value => ({ value, label: value }))
       .sort((a, b) => a.label.localeCompare(b.label));
-
-    console.log('Final dropdown options:', result);
-    return result;
 
   } catch (error) {
     console.error('Error fetching semi-finished options:', error);
     return [];
   }
 };
+
+// Writes cancelQty directly into Column I (Cancel Order) for the matching sfSrNo row
+export const submitCancelOrder = async (sfSrNo: string, cancelQty: number): Promise<boolean> => {
+  try {
+    console.log('[cancelOrder] Starting', { sfSrNo, cancelQty });
+
+    // Step 1: fetch sheet to find the matching row
+    const data = await fetchSheetData('Semi Production');
+
+    // Rows 0-5 are headers; data starts at index 6
+    // Sheet row (1-based) = array index + 1
+    const HEADER_OFFSET = 6;
+    let targetSheetRow = -1;
+
+    for (let i = HEADER_OFFSET; i < data.length; i++) {
+      if (data[i][1]?.toString().trim() === sfSrNo.trim()) {
+        targetSheetRow = i + 1; // convert to 1-based sheet row
+        break;
+      }
+    }
+
+    if (targetSheetRow === -1) {
+      console.error('[cancelOrder] SF Sr No not found:', sfSrNo);
+      return false;
+    }
+
+    console.log('[cancelOrder] Writing', cancelQty, 'to col I, sheet row', targetSheetRow);
+
+    // Step 2: write cancelQty into Column I (9, 1-based) - "Cancel Order"
+    const fd = new FormData();
+    fd.append('action', 'updateCell');
+    fd.append('sheetName', 'Semi Production');
+    fd.append('rowIndex', String(targetSheetRow));
+    fd.append('columnIndex', '9');
+    fd.append('value', String(cancelQty));
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'cors',
+      body: fd,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('[cancelOrder] Server response', result);
+
+    return result.success === true;
+
+  } catch (error) {
+    console.error('[cancelOrder] Error:', error);
+    return false;
+  }
+};
+
 // Submit data to "Semi Production" sheet using doPost
 export const submitToSemiProduction = async (rowData: any[]): Promise<boolean> => {
   try {
@@ -253,7 +261,7 @@ export const submitToSemiProduction = async (rowData: any[]): Promise<boolean> =
     const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       mode: 'cors',
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {

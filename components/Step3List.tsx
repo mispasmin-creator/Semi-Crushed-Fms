@@ -3,7 +3,7 @@ import {
   AppState
 } from '../types';
 import {
-  Plus, X, Camera, Save, ArrowRight, Upload, Target, Settings, Loader, RefreshCw, AlertTriangle, Eye
+  Plus, X, Camera, Save, ArrowRight, Upload, Target, Settings, Loader, RefreshCw, AlertTriangle, Eye, ClipboardList
 } from 'lucide-react';
 import {
   fetchPendingSemiJobCards,
@@ -25,6 +25,7 @@ interface Props {
 }
 
 const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSjc, setSelectedSjc] = useState<SemiJobCardRecord | null>(null);
   const [pendingJobCards, setPendingJobCards] = useState<SemiJobCardRecord[]>([]);
@@ -99,17 +100,15 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
     }
   };
 
-  const handleSJCChange = (sjcSrNo: string) => {
-    const selected = pendingJobCards.find(j => j.sjcSrNo === sjcSrNo) || null;
-    setSelectedSjc(selected);
-
-    // Reset form when changing job card
-    if (selected) {
-      setFormData({
-        ...formData,
-        qtyOfSemiFinishedGood: selected.qty, // Default to planned quantity
-      });
-    }
+  // ── NEW: open modal with a pre-selected job card ──
+  const handleLogProduction = (job: SemiJobCardRecord) => {
+    resetForm();
+    setSelectedSjc(job);
+    setFormData(prev => ({
+      ...prev,
+      qtyOfSemiFinishedGood: job.qty,
+    }));
+    setIsModalOpen(true);
   };
 
   const handleStartPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,7 +149,6 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
 
   const handleViewImage = (imageUrl: string) => {
     if (imageUrl) {
-      // Open in new tab if it's a Drive URL
       if (imageUrl.includes('drive.google.com') || imageUrl.includes('uc?export=view')) {
         window.open(imageUrl, '_blank');
       } else {
@@ -171,7 +169,6 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
     setIsUploading(true);
 
     try {
-      // Upload photos if selected
       let startPhotoUrl = '';
       let endPhotoUrl = '';
 
@@ -189,36 +186,35 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
 
       const timestamp = formatDate(new Date());
 
-      // Prepare row data for Semi Actual sheet (28 columns as per header)
       const rowData = [
-        timestamp,                          // Timestamp
-        selectedSjc.sjcSrNo,                 // Semi Finished Job Card No.
-        selectedSjc.supervisorName,           // Supervisor Name
-        selectedSjc.dateOfProduction,         // Date Of Production
-        selectedSjc.productName,               // Product Name
-        Number(formData.qtyOfSemiFinishedGood) || 0, // Qty Of Semi Finished Good
-        formData.rawMaterial1Name || '',      // Name Of Raw Material 1
-        Number(formData.rawMaterial1Qty) || 0, // Quantity Of Raw Material 1
-        formData.rawMaterial2Name || '',      // Name Of Raw Material 2
-        Number(formData.rawMaterial2Qty) || 0, // Quantity Of Raw Material 2
-        formData.rawMaterial3Name || '',      // Name Of Raw Material 3
-        Number(formData.rawMaterial3Qty) || 0, // Quantity Of Raw Material 3
-        formData.isAnyEndProduct,             // Is Any End Product
-        formData.endProductRawMaterialName || '', // Name Of Raw Material for End Product
-        Number(formData.endProductQty) || 0,  // End Product Qty
-        formData.narration || '',              // Narration
-        serialNo,                             // S No.
-        Number(formData.startingReading) || 0, // Starting Reading
-        startPhotoUrl,                        // Starting Reading Photo
-        Number(formData.endingReading) || 0,   // Ending Reading
-        endPhotoUrl,                          // Ending Reading Photo
-        Number(formData.machineRunningHour) || 0, // Machine Running hour
-        formData.rawMaterial4Name || '',      // Name Of Raw Material 4
-        Number(formData.rawMaterial4Qty) || 0, // Quantity Of Raw Material 4
-        formData.rawMaterial5Name || '',      // Name Of Raw Material 5
-        Number(formData.rawMaterial5Qty) || 0, // Quantity Of Raw Material 5
-        Number(formData.machineRunning) || 0,  // Machine Running
-        selectedSjc.sfSrNo                     // Semi Finished Production No.
+        timestamp,
+        selectedSjc.sjcSrNo,
+        selectedSjc.supervisorName,
+        selectedSjc.dateOfProduction,
+        selectedSjc.productName,
+        Number(formData.qtyOfSemiFinishedGood) || 0,
+        formData.rawMaterial1Name || '',
+        Number(formData.rawMaterial1Qty) || 0,
+        formData.rawMaterial2Name || '',
+        Number(formData.rawMaterial2Qty) || 0,
+        formData.rawMaterial3Name || '',
+        Number(formData.rawMaterial3Qty) || 0,
+        formData.isAnyEndProduct,
+        formData.endProductRawMaterialName || '',
+        Number(formData.endProductQty) || 0,
+        formData.narration || '',
+        serialNo,
+        Number(formData.startingReading) || 0,
+        startPhotoUrl,
+        Number(formData.endingReading) || 0,
+        endPhotoUrl,
+        Number(formData.machineRunningHour) || 0,
+        formData.rawMaterial4Name || '',
+        Number(formData.rawMaterial4Qty) || 0,
+        formData.rawMaterial5Name || '',
+        Number(formData.rawMaterial5Qty) || 0,
+        Number(formData.machineRunning) || 0,
+        selectedSjc.sfSrNo
       ];
 
       console.log('Submitting to Semi Actual:', rowData);
@@ -226,9 +222,7 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
       const submitted = await submitToSemiActual(rowData);
 
       if (submitted) {
-        // Refresh data
         await loadData();
-
         setIsModalOpen(false);
         resetForm();
         alert('Production entry logged successfully!');
@@ -297,134 +291,227 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
             <RefreshCw size={16} className="mr-2" />
             Refresh
           </button>
-          <button
-            onClick={() => {
-              resetForm();
-              setIsModalOpen(true);
-            }}
-            className="flex items-center px-6 py-2.5 bg-[#84a93c] text-white rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 font-bold"
-          >
-            <Plus size={18} className="mr-2" />
-            Log Production
-          </button>
         </div>
       </div>
 
-      {/* Semi Actual Data Table */}
+      {/* ── Tab buttons ── */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-sm transition-all ${
+            activeTab === 'pending'
+              ? 'bg-[#84a93c] text-white shadow-md shadow-emerald-100'
+              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>⏱</span>
+          Pending ({pendingJobCards.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-sm transition-all ${
+            activeTab === 'history'
+              ? 'bg-[#84a93c] text-white shadow-md shadow-emerald-100'
+              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>⊙</span>
+          History ({semiActualData.length})
+        </button>
+      </div>
+
+      {/* ── Single card wrapping whichever tab is active ── */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-100">
-          <h3 className="text-sm font-black text-slate-700">Production History</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-[#F8FAFC]">
-              <tr>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">S No.</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">SJC No.</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">SF No.</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Supervisor</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Product</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Raw Materials</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">End Product</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Narration</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Start/End</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Machine Hrs</th>
-                <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Photos</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
+
+        {/* ── PENDING TAB ── */}
+        {activeTab === 'pending' && (
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+          {/* Panel header */}
+          <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#84a93c]" />
+              <h3 className="text-sm font-black text-slate-700">Pending Job Cards</h3>
+              <span className="px-2 py-0.5 bg-[#84a93c]/10 text-[#84a93c] rounded-full text-[9px] font-black">
+                {pendingJobCards.length}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#F8FAFC]">
                 <tr>
-                  <td colSpan={13} className="px-6 py-10 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <Loader size={16} className="animate-spin text-[#84a93c]" />
-                      <span className="text-slate-400 text-xs">Loading...</span>
-                    </div>
-                  </td>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Action</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">SJC No.</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Product</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</th>
                 </tr>
-              ) : semiActualData.length === 0 ? (
-                <tr>
-                  <td colSpan={13} className="px-6 py-10 text-center text-slate-400 font-medium text-sm">
-                    No production entries found.
-                  </td>
-                </tr>
-              ) : (
-                semiActualData.map((entry, index) => (
-                  <tr key={index} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 text-xs font-bold text-[#84a93c]">{entry.sNo}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{formatDisplayDate(entry.dateOfProduction)}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-slate-700">{entry.semiFinishedJobCardNo}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{entry.semiFinishedProductionNo}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{entry.supervisorName}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600 max-w-[150px] truncate" title={entry.productName}>
-                      {entry.productName}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-bold text-emerald-600">{entry.qtyOfSemiFinishedGood}</td>
-                    <td className="px-4 py-3 text-xs">
-                      <div className="space-y-1">
-                        {entry.rawMaterial1Name && entry.rawMaterial1Qty > 0 && (
-                          <div className="text-[9px]">{entry.rawMaterial1Name}: {entry.rawMaterial1Qty}</div>
-                        )}
-                        {entry.rawMaterial2Name && entry.rawMaterial2Qty > 0 && (
-                          <div className="text-[9px]">{entry.rawMaterial2Name}: {entry.rawMaterial2Qty}</div>
-                        )}
-                        {entry.rawMaterial3Name && entry.rawMaterial3Qty > 0 && (
-                          <div className="text-[9px]">{entry.rawMaterial3Name}: {entry.rawMaterial3Qty}</div>
-                        )}
-                        {entry.rawMaterial4Name && entry.rawMaterial4Qty > 0 && (
-                          <div className="text-[9px]">{entry.rawMaterial4Name}: {entry.rawMaterial4Qty}</div>
-                        )}
-                        {entry.rawMaterial5Name && entry.rawMaterial5Qty > 0 && (
-                          <div className="text-[9px]">{entry.rawMaterial5Name}: {entry.rawMaterial5Qty}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      {entry.isAnyEndProduct === 'Yes' ? (
-                        <div>
-                          <span className="text-[9px] font-bold text-purple-600">{entry.endProductRawMaterialName}</span>
-                          <span className="text-[9px] ml-1">({entry.endProductQty})</span>
-                        </div>
-                      ) : (
-                        <span className="text-[9px] text-slate-400">No</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-[9px] uppercase font-bold text-[#84a93c]">{entry.narration}</td>
-                    <td className="px-4 py-3 text-[9px] text-slate-500">
-                      {entry.startingReading} → {entry.endingReading}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-bold text-amber-600">{entry.machineRunningHour}h</td>
-                    <td className="px-4 py-3">
-                      <div className="flex space-x-1">
-                        {entry.startingReadingPhoto && (
-                          <button
-                            onClick={() => handleViewImage(entry.startingReadingPhoto)}
-                            className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center hover:bg-blue-100"
-                            title="View Start Photo"
-                          >
-                            <Camera size={12} className="text-blue-600" />
-                          </button>
-                        )}
-                        {entry.endingReadingPhoto && (
-                          <button
-                            onClick={() => handleViewImage(entry.endingReadingPhoto)}
-                            className="w-6 h-6 bg-green-50 rounded-lg flex items-center justify-center hover:bg-green-100"
-                            title="View End Photo"
-                          >
-                            <Eye size={12} className="text-green-600" />
-                          </button>
-                        )}
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-10 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Loader size={16} className="animate-spin text-[#84a93c]" />
+                        <span className="text-slate-400 text-xs">Loading...</span>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : pendingJobCards.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium text-sm">
+                      No pending job cards.
+                    </td>
+                  </tr>
+                ) : (
+                  pendingJobCards.map((job, index) => (
+                    <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleLogProduction(job)}
+                          className="flex items-center px-3 py-1.5 bg-[#84a93c] text-white rounded-lg hover:bg-emerald-600 transition-all font-bold text-[10px] shadow-sm shadow-emerald-100"
+                        >
+                          <ClipboardList size={12} className="mr-1.5" />
+                          Entry
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold text-[#84a93c]">{job.sjcSrNo}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 max-w-[120px] truncate" title={job.productName}>
+                        {job.productName}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold text-emerald-600">{job.qty}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{job.dateOfProduction}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+        )}
+
+        {/* ── HISTORY TAB ── */}
+        {activeTab === 'history' && (
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+          {/* Panel header */}
+          <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+            <h3 className="text-sm font-black text-slate-700">Production History</h3>
+            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[9px] font-black">
+              {semiActualData.length}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#F8FAFC]">
+                <tr>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">S No.</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">SJC No.</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Product</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Raw Materials</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">End Product</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Narration</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Start/End</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Hrs</th>
+                  <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Photos</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-10 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Loader size={16} className="animate-spin text-[#84a93c]" />
+                        <span className="text-slate-400 text-xs">Loading...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : semiActualData.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-10 text-center text-slate-400 font-medium text-sm">
+                      No production entries found.
+                    </td>
+                  </tr>
+                ) : (
+                  semiActualData.map((entry, index) => (
+                    <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 text-xs font-bold text-[#84a93c]">{entry.sNo}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{formatDisplayDate(entry.dateOfProduction)}</td>
+                      <td className="px-4 py-3 text-xs font-bold text-slate-700">{entry.semiFinishedJobCardNo}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600 max-w-[120px] truncate" title={entry.productName}>
+                        {entry.productName}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold text-emerald-600">{entry.qtyOfSemiFinishedGood}</td>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="space-y-0.5">
+                          {entry.rawMaterial1Name && entry.rawMaterial1Qty > 0 && (
+                            <div className="text-[9px]">{entry.rawMaterial1Name}: {entry.rawMaterial1Qty}</div>
+                          )}
+                          {entry.rawMaterial2Name && entry.rawMaterial2Qty > 0 && (
+                            <div className="text-[9px]">{entry.rawMaterial2Name}: {entry.rawMaterial2Qty}</div>
+                          )}
+                          {entry.rawMaterial3Name && entry.rawMaterial3Qty > 0 && (
+                            <div className="text-[9px]">{entry.rawMaterial3Name}: {entry.rawMaterial3Qty}</div>
+                          )}
+                          {entry.rawMaterial4Name && entry.rawMaterial4Qty > 0 && (
+                            <div className="text-[9px]">{entry.rawMaterial4Name}: {entry.rawMaterial4Qty}</div>
+                          )}
+                          {entry.rawMaterial5Name && entry.rawMaterial5Qty > 0 && (
+                            <div className="text-[9px]">{entry.rawMaterial5Name}: {entry.rawMaterial5Qty}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {entry.isAnyEndProduct === 'Yes' ? (
+                          <div>
+                            <span className="text-[9px] font-bold text-purple-600">{entry.endProductRawMaterialName}</span>
+                            <span className="text-[9px] ml-1">({entry.endProductQty})</span>
+                          </div>
+                        ) : (
+                          <span className="text-[9px] text-slate-400">No</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[9px] uppercase font-bold text-[#84a93c]">{entry.narration}</td>
+                      <td className="px-4 py-3 text-[9px] text-slate-500">
+                        {entry.startingReading} → {entry.endingReading}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold text-amber-600">{entry.machineRunningHour}h</td>
+                      <td className="px-4 py-3">
+                        <div className="flex space-x-1">
+                          {entry.startingReadingPhoto && (
+                            <button
+                              onClick={() => handleViewImage(entry.startingReadingPhoto)}
+                              className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center hover:bg-blue-100"
+                              title="View Start Photo"
+                            >
+                              <Camera size={12} className="text-blue-600" />
+                            </button>
+                          )}
+                          {entry.endingReadingPhoto && (
+                            <button
+                              onClick={() => handleViewImage(entry.endingReadingPhoto)}
+                              className="w-6 h-6 bg-green-50 rounded-lg flex items-center justify-center hover:bg-green-100"
+                              title="View End Photo"
+                            >
+                              <Eye size={12} className="text-green-600" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        )}
+
+      </div>{/* end tab panel wrapper */}
 
       {/* Image Preview Modal */}
       {selectedImage && (
@@ -450,7 +537,14 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in zoom-in duration-300 overflow-y-auto">
           <div className="bg-white rounded-[32px] w-full max-w-4xl my-auto overflow-hidden shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between px-8 py-6 border-b border-slate-50 sticky top-0 bg-white z-10">
-              <h3 className="text-xl font-black text-slate-800">Log Production Entry</h3>
+              <div>
+                <h3 className="text-xl font-black text-slate-800">Log Production Entry</h3>
+                {selectedSjc && (
+                  <p className="text-xs text-[#84a93c] font-bold mt-0.5">
+                    {selectedSjc.sjcSrNo} — {selectedSjc.productName}
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => {
                   setIsModalOpen(false);
@@ -463,84 +557,65 @@ const Step3List: React.FC<Props> = ({ state, onUpdate }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-              {/* Selection Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">
-                    Semi Finished Job Card No. <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={selectedSjc?.sjcSrNo || ''}
-                    onChange={e => handleSJCChange(e.target.value)}
-                    className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl focus:ring-2 focus:ring-[#84a93c] outline-none font-bold text-xs appearance-none"
-                  >
-                    <option value="">-- Select Job Card --</option>
-                    {pendingJobCards.length === 0 ? (
-                      <option value="" disabled>No pending jobs available</option>
-                    ) : (
-                      pendingJobCards.map(job => (
-                        <option key={job.sjcSrNo} value={job.sjcSrNo}>
-                          {job.sjcSrNo} - {job.productName} ({job.qty}) - {job.status}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  {pendingJobCards.length === 0 && (
-                    <p className="text-[10px] text-amber-600 mt-1">No pending jobs with Planned date</p>
-                  )}
+              {/* Read-only job card info */}
+              {selectedSjc && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Semi Finished Job Card No.</label>
+                    <input
+                      readOnly
+                      type="text"
+                      value={selectedSjc.sjcSrNo}
+                      className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Semi Finished Production No.</label>
+                    <input
+                      readOnly
+                      type="text"
+                      value={selectedSjc.sfSrNo}
+                      className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Supervisor Name</label>
+                    <input
+                      readOnly
+                      type="text"
+                      value={selectedSjc.supervisorName}
+                      className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Date Of Production</label>
+                    <input
+                      readOnly
+                      type="text"
+                      value={selectedSjc.dateOfProduction}
+                      className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Product Name</label>
+                    <input
+                      readOnly
+                      type="text"
+                      value={selectedSjc.productName}
+                      className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Serial No.</label>
+                    <input
+                      readOnly
+                      type="text"
+                      value={serialNo}
+                      className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
                 </div>
-
-                {selectedSjc && (
-                  <>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Semi Finished Production No.</label>
-                      <input
-                        readOnly
-                        type="text"
-                        value={selectedSjc.sfSrNo}
-                        className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Supervisor Name</label>
-                      <input
-                        readOnly
-                        type="text"
-                        value={selectedSjc.supervisorName}
-                        className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Date Of Production</label>
-                      <input
-                        readOnly
-                        type="text"
-                        value={selectedSjc.dateOfProduction}
-                        className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Product Name</label>
-                      <input
-                        readOnly
-                        type="text"
-                        value={selectedSjc.productName}
-                        className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Serial No.</label>
-                      <input
-                        readOnly
-                        type="text"
-                        value={serialNo}
-                        className="w-full px-4 py-2 bg-[#F4F7FE] border-none rounded-xl outline-none font-bold text-xs text-slate-400 cursor-not-allowed"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
+              )}
 
               {selectedSjc && (
                 <>

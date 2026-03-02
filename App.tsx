@@ -200,7 +200,7 @@ const App: React.FC = () => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'step1', label: 'SF Production', icon: PackagePlus },
     { id: 'step2', label: 'Job Card Planning', icon: ClipboardList },
-    { id: 'step3', label: 'Actual Entry', icon: FileCheck },
+    { id: 'step3', label: 'Production Entry', icon: FileCheck },
     { id: 'step4', label: 'Mark Done', icon: CircleCheckBig },
     { id: 'step5', label: 'Crushing', icon: Hammer },
   ];

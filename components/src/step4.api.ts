@@ -12,24 +12,28 @@ export const fetchStep4Data = async (): Promise<SemiActualRecord[]> => {
         let headerRowIndex = -1;
         let planned1Index = -1;
         let actual1Index = -1;
+        let planned2Index = -1;
+        let actual2Index = -1;
 
         // Search for header row containing the keywords
         for (let i = 0; i < Math.min(10, data.length); i++) {
             const row = data[i];
-            let hasPlanned = false;
-            let hasActual = false;
             for (let j = 0; j < row.length; j++) {
                 const val = (row[j] || '').toString().toLowerCase().trim();
                 if (val === 'planned1') {
                     planned1Index = j;
-                    hasPlanned = true;
                 }
                 if (val === 'actual1') {
                     actual1Index = j;
-                    hasActual = true;
+                }
+                if (val === 'planned2') {
+                    planned2Index = j;
+                }
+                if (val === 'actual2') {
+                    actual2Index = j;
                 }
             }
-            if (hasPlanned || hasActual) {
+            if (planned1Index !== -1 || actual1Index !== -1 || planned2Index !== -1 || actual2Index !== -1) {
                 headerRowIndex = i;
                 break;
             }
@@ -49,6 +53,11 @@ export const fetchStep4Data = async (): Promise<SemiActualRecord[]> => {
                     row[1].includes('Actual')) {
                     return null;
                 }
+
+                // Helper function to get column value safely
+                const getColumnValue = (index: number): string => {
+                    return index !== -1 && row[index] !== undefined ? String(row[index] ?? '') : '';
+                };
 
                 return {
                     timestamp: row[0] || '',
@@ -79,10 +88,13 @@ export const fetchStep4Data = async (): Promise<SemiActualRecord[]> => {
                     rawMaterial5Qty: parseFloat(row[25]) || 0,
                     machineRunning: parseFloat(row[26]) || 0,
                     semiFinishedProductionNo: row[27] || '',
-                    planned1: String(planned1Index !== -1 ? row[planned1Index] ?? '' : (row[28] ?? '')),
-                    actual1: String(actual1Index !== -1 ? row[actual1Index] ?? '' : (row[29] ?? '')),
+                    planned1: getColumnValue(planned1Index),
+                    actual1: getColumnValue(actual1Index),
+                    planned2: getColumnValue(planned2Index),
+                    actual2: getColumnValue(actual2Index),
                     rowIndex: startOffset + index + 1, // 1-based index for Google Sheets
-                    actual1ColumnIndex: actual1Index !== -1 ? actual1Index + 1 : 30 // 1-based index (fallback to 30 if column not found)
+                    actual1ColumnIndex: actual1Index !== -1 ? actual1Index + 1 : undefined,
+                    actual2ColumnIndex: actual2Index !== -1 ? actual2Index + 1 : undefined
                 };
             })
             .filter(record => record !== null) as SemiActualRecord[];
@@ -113,6 +125,31 @@ export const updateStep4ActualDate = async (rowIndex: number, columnIndex: numbe
         return result.success === true;
     } catch (error) {
         console.error('Error updating step 4 actual date:', error);
+        return false;
+    }
+};
+
+// Update actual2 date in Semi Actual sheet
+export const updateStep4Actual2Date = async (rowIndex: number, columnIndex: number, date: string): Promise<boolean> => {
+    try {
+        const formData = new FormData();
+        formData.append('action', 'updateCell');
+        formData.append('sheetName', 'Semi Actual');
+        formData.append('rowIndex', rowIndex.toString());
+        formData.append('columnIndex', columnIndex.toString());
+        formData.append('value', date);
+
+        const response = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'cors',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+        const result = await response.json();
+        return result.success === true;
+    } catch (error) {
+        console.error('Error updating step 4 actual2 date:', error);
         return false;
     }
 };
